@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Nawasara\Opnsense\Jobs\ExpireVpnAccountsJob;
 use Nawasara\Opnsense\Jobs\SyncOpnsenseStatusJob;
 use Nawasara\Opnsense\Services\OPNsenseClient;
 use Symfony\Component\Finder\Finder;
@@ -56,6 +57,13 @@ class OpnsenseServiceProvider extends ServiceProvider
             $schedule->call(fn () => SyncOpnsenseStatusJob::dispatch(triggerSource: 'scheduled'))
                 ->name('nawasara-opnsense:sync-status')
                 ->cron("*/{$interval} * * * *")
+                ->withoutOverlapping(10);
+
+            // Daily VPN account lifecycle sweep — disable expired peers, flag
+            // expiring-soon, hard-delete beyond grace. Runs at 02:15.
+            $schedule->call(fn () => ExpireVpnAccountsJob::dispatch(triggerSource: 'scheduled'))
+                ->name('nawasara-opnsense:expire-vpn')
+                ->dailyAt('02:15')
                 ->withoutOverlapping(10);
         });
     }

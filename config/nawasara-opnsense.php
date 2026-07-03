@@ -32,5 +32,8 @@ return [
         'warn_before_days' => 14,
         // Setelah expired + N hari grace → boleh hard delete.
         'grace_period_days' => 30,
+        // Endpoint host untuk .conf client (WAN address yg didial user).
+        // Kosong = pakai host appliance (LAN). Set kalau WAN address beda.
+        'endpoint_host' => env('NAWASARA_OPNSENSE_WG_ENDPOINT', ''),
     ],
 ];

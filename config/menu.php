@@ -20,6 +20,13 @@ return [
                 'permission' => 'opnsense.monitor.view',
                 'navigate' => true,
             ],
+            [
+                'label' => 'VPN OPNsense',
+                'icon' => 'lucide-key-round',
+                'url' => url($prefix.'/vpn'),
+                'permission' => 'opnsense.vpn.view',
+                'navigate' => true,
+            ],
         ],
     ],
 ];

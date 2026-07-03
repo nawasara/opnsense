@@ -200,4 +200,109 @@ class OPNsenseClient
 
         return $r->successful() ? (array) $r->json() : [];
     }
+
+    // ── Fase B — WireGuard VPN ───────────────────────────────────────────────
+
+    /**
+     * GET /api/wireguard/server/key_pair → generate a fresh {privkey, pubkey}.
+     * OPNsense does NOT store a peer's private key, so Nawasara generates the
+     * keypair, registers only the pubkey via addWireguardClient(), and keeps
+     * the privkey (encrypted) to build the client .conf.
+     *
+     * @return array{privkey: string, pubkey: string}|null
+     */
+    public function wireguardKeyPair(?string $instance = null): ?array
+    {
+        $r = $this->api($instance)->get('/wireguard/server/key_pair');
+        if (! $r->successful()) {
+            return null;
+        }
+        $j = $r->json();
+
+        return isset($j['privkey'], $j['pubkey'])
+            ? ['privkey' => $j['privkey'], 'pubkey' => $j['pubkey']]
+            : null;
+    }
+
+    /**
+     * GET /api/wireguard/server/search_server → list WireGuard servers.
+     */
+    public function wireguardServers(?string $instance = null): array
+    {
+        $r = $this->api($instance)->get('/wireguard/server/search_server');
+
+        return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+    }
+
+    /**
+     * GET /api/wireguard/server/get_server/{uuid} → server detail (pubkey, port,
+     * tunneladdress) needed to build a client .conf peer section.
+     */
+    public function wireguardServer(string $uuid, ?string $instance = null): ?array
+    {
+        $r = $this->api($instance)->get("/wireguard/server/get_server/{$uuid}");
+
+        return $r->successful() ? (array) $r->json('server') : null;
+    }
+
+    /**
+     * POST /api/wireguard/client/add_client → register a peer (pubkey only).
+     * Returns the new UUID on success.
+     *
+     * @param  array{name: string, pubkey: string, tunneladdress: string, servers: string, psk?: string}  $payload
+     */
+    public function addWireguardClient(array $payload, ?string $instance = null): ?string
+    {
+        $r = $this->api($instance)->post('/wireguard/client/add_client', ['client' => $payload]);
+        if (! $r->successful()) {
+            return null;
+        }
+        $j = $r->json();
+
+        return ($j['result'] ?? null) === 'saved' ? ($j['uuid'] ?? null) : null;
+    }
+
+    /**
+     * POST /api/wireguard/client/del_client/{uuid} → remove a peer.
+     */
+    public function delWireguardClient(string $uuid, ?string $instance = null): bool
+    {
+        $r = $this->api($instance)->post("/wireguard/client/del_client/{$uuid}");
+
+        return $r->successful() && ($r->json('result') ?? '') === 'deleted';
+    }
+
+    /**
+     * POST /api/wireguard/client/toggle_client/{uuid}/{enabled} → enable(1)/disable(0)
+     * a peer. Used by the expiry job to disable rather than delete (renewable).
+     */
+    public function toggleWireguardClient(string $uuid, bool $enabled, ?string $instance = null): bool
+    {
+        $flag = $enabled ? 1 : 0;
+        $r = $this->api($instance)->post("/wireguard/client/toggle_client/{$uuid}/{$flag}");
+
+        return $r->successful();
+    }
+
+    /**
+     * POST /api/wireguard/service/reconfigure → apply staged WireGuard changes.
+     * MUST be called after any add/del/toggle for it to take effect.
+     */
+    public function reconfigureWireguard(?string $instance = null): bool
+    {
+        $r = $this->api($instance)->post('/wireguard/service/reconfigure');
+
+        return $r->successful();
+    }
+
+    /**
+     * GET /api/wireguard/service/show → per-peer live status (handshake, transfer).
+     * Returns rows keyed loosely; caller correlates by public-key / name.
+     */
+    public function wireguardShow(?string $instance = null): array
+    {
+        $r = $this->api($instance)->get('/wireguard/service/show');
+
+        return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+    }
 }
