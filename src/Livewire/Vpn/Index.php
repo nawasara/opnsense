@@ -117,17 +117,21 @@ class Index extends Component
             'formUserId' => 'required|integer|exists:users,id',
             'formApplianceId' => 'required|integer|exists:nawasara_opnsense_appliances,id',
             'formServerUuid' => 'required|string',
-            'formName' => 'required|string|max:64|regex:/^[A-Za-z0-9_.-]+$/',
             'formTtlMonths' => 'required|integer|min:1|max:60',
         ], [], [
             'formUserId' => 'pemilik SSO',
             'formServerUuid' => 'server WireGuard',
-            'formName' => 'nama',
         ]);
 
         $appliance = OpnsenseAppliance::findOrFail($this->formApplianceId);
         $client = app(OPNsenseClient::class);
         $instance = $appliance->slug;
+
+        // Peer name derived from the SSO owner (username preferred, else email
+        // local-part), sanitised to WireGuard's allowed charset. Uniqueness is
+        // ensured by a short suffix if the owner already has a peer.
+        $owner = \App\Models\User::find($this->formUserId);
+        $this->formName = $this->makePeerName($owner);
 
         // 1. Generate keypair (OPNsense won't store the private key for us).
         $keys = $client->wireguardKeyPair($instance);
@@ -278,6 +282,22 @@ class Index extends Component
         }
 
         return "{$prefix}.254/32";
+    }
+
+    /**
+     * Derive a WireGuard peer name from the SSO owner. Prefer username, else the
+     * email local-part; sanitise to [A-Za-z0-9_.-]; append a numeric suffix when
+     * the owner already has account(s) so names stay unique.
+     */
+    protected function makePeerName(?\App\Models\User $owner): string
+    {
+        $raw = $owner?->username ?: (\Illuminate\Support\Str::before((string) ($owner?->email ?? ''), '@'));
+        $base = preg_replace('/[^A-Za-z0-9_.-]/', '', str_replace(' ', '-', (string) $raw)) ?: 'user';
+        $base = substr($base, 0, 56);
+
+        $count = OpnsenseVpnAccount::where('user_id', $owner?->id)->count();
+
+        return $count === 0 ? $base : "{$base}-".($count + 1);
     }
 
     public function render()

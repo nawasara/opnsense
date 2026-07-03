@@ -123,10 +123,10 @@
 
     {{-- Provision modal --}}
     <x-nawasara-ui::modal id="vpn-provision" title="Buat Akun VPN" maxWidth="lg">
-        {{-- The modal renders its footer slot OUTSIDE this content div, so the
-             footer submit button sits outside <form>. HTML5 form="id" attribute
-             links them back — the proven pattern used across nawasara-whm. --}}
-        <form wire:submit="provision" id="vpn-provision-form" class="space-y-4">
+        {{-- Buttons live INSIDE the <form> (not the modal footer slot) so the
+             submit button is guaranteed inside <form> in the DOM — the footer
+             slot renders in a separate div, breaking submit for a button there. --}}
+        <form wire:submit="provision" class="space-y-4">
             {{-- Pemilik SSO --}}
             <div>
                 <x-nawasara-ui::form.label value="Pemilik (Akun SSO)" />
@@ -170,34 +170,27 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <x-nawasara-ui::form.input
-                        label="Nama Akun"
-                        wire:model="formName"
-                        placeholder="mis. budi-laptop" />
-                    @error('formName') <p class="text-xs text-red-600 dark:text-red-400 mt-1">{{ $message }}</p> @enderror
-                </div>
-                <div>
-                    <x-nawasara-ui::form.input
-                        type="number"
-                        label="Masa Berlaku (bulan)"
-                        wire:model="formTtlMonths"
-                        min="1" max="60" />
-                    <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Default 6 bulan.</p>
-                </div>
+            <div>
+                <x-nawasara-ui::form.input
+                    type="number"
+                    label="Masa Berlaku (bulan)"
+                    wire:model="formTtlMonths"
+                    min="1" max="60" />
+                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                    Default 6 bulan. Nama akun otomatis dari pemilik SSO.
+                </p>
             </div>
 
-            <x-slot:footer>
+            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-neutral-700">
                 <x-nawasara-ui::button type="button" color="neutral" variant="outline"
                     x-on:click="$dispatch('close-modal', 'vpn-provision')">
                     Batal
                 </x-nawasara-ui::button>
-                <x-nawasara-ui::button type="submit" form="vpn-provision-form" color="primary"
+                <x-nawasara-ui::button type="submit" color="primary"
                     wire:loading.attr="disabled" wire:target="provision">
                     Buat & Provision
                 </x-nawasara-ui::button>
-            </x-slot:footer>
+            </div>
         </form>
     </x-nawasara-ui::modal>
 </div>
