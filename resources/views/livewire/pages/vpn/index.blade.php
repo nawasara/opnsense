@@ -123,7 +123,11 @@
 
     {{-- Provision modal --}}
     <x-nawasara-ui::modal id="vpn-provision" title="Buat Akun VPN" maxWidth="lg">
-        <form wire:submit="provision" class="space-y-4">
+        {{-- NB: no <form> wrapper — the modal renders its footer slot OUTSIDE
+             the content div, so a submit button there would sit outside the
+             form and never fire wire:submit. Use wire:click on the footer
+             button instead. --}}
+        <div class="space-y-4">
             {{-- Pemilik SSO --}}
             <div>
                 <x-nawasara-ui::form.label value="Pemilik (Akun SSO)" />
@@ -190,10 +194,11 @@
                     x-on:click="$dispatch('close-modal', 'vpn-provision')">
                     Batal
                 </x-nawasara-ui::button>
-                <x-nawasara-ui::button type="submit" color="primary" wire:loading.attr="disabled">
+                <x-nawasara-ui::button type="button" color="primary"
+                    wire:click="provision" wire:loading.attr="disabled" wire:target="provision">
                     Buat & Provision
                 </x-nawasara-ui::button>
             </x-slot:footer>
-        </form>
+        </div>
     </x-nawasara-ui::modal>
 </div>
