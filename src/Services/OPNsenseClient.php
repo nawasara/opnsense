@@ -305,4 +305,129 @@ class OPNsenseClient
 
         return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
     }
+
+    // ── Fase C — Firewall (aliases + blocklist) ──────────────────────────────
+
+    /**
+     * POST /api/firewall/alias/search_item → list aliases (name, type, items).
+     */
+    public function aliasSearch(?string $instance = null): array
+    {
+        $r = $this->api($instance)->post('/firewall/alias/search_item', ['rowCount' => 1000]);
+
+        return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+    }
+
+    /**
+     * Find an alias UUID by name. GET /api/firewall/alias/get_alias_u_u_i_d/{name}
+     * (camelCase getAliasUUID). Returns null when not found.
+     */
+    public function aliasUuidByName(string $name, ?string $instance = null): ?string
+    {
+        $r = $this->api($instance)->get("/firewall/alias/get_alias_u_u_i_d/{$name}");
+        if (! $r->successful()) {
+            return null;
+        }
+        $uuid = $r->json('uuid');
+
+        return is_string($uuid) && $uuid !== '' ? $uuid : null;
+    }
+
+    /**
+     * POST /api/firewall/alias/add_item → create an alias definition.
+     * Returns the new UUID on success.
+     *
+     * @param  array{name: string, type: string, content?: string, description?: string, enabled?: string}  $payload
+     */
+    public function addAlias(array $payload, ?string $instance = null): ?string
+    {
+        $r = $this->api($instance)->post('/firewall/alias/add_item', ['alias' => $payload]);
+        if (! $r->successful()) {
+            return null;
+        }
+
+        return ($r->json('result') ?? null) === 'saved' ? ($r->json('uuid') ?? null) : null;
+    }
+
+    /**
+     * POST /api/firewall/alias/reconfigure → apply alias definition changes.
+     */
+    public function reconfigureAlias(?string $instance = null): bool
+    {
+        $r = $this->api($instance)->post('/firewall/alias/reconfigure');
+
+        return $r->successful();
+    }
+
+    /**
+     * POST /api/firewall/alias_util/add/{alias} → add a single entry to an alias
+     * without a full reconfigure. Lightweight — ideal for dynamic block lists.
+     */
+    public function aliasUtilAdd(string $alias, string $address, ?string $instance = null): bool
+    {
+        $r = $this->api($instance)->post("/firewall/alias_util/add/{$alias}", ['address' => $address]);
+
+        return $r->successful();
+    }
+
+    /**
+     * POST /api/firewall/alias_util/delete/{alias} → remove a single entry.
+     */
+    public function aliasUtilDelete(string $alias, string $address, ?string $instance = null): bool
+    {
+        $r = $this->api($instance)->post("/firewall/alias_util/delete/{$alias}", ['address' => $address]);
+
+        return $r->successful();
+    }
+
+    /**
+     * GET /api/firewall/alias_util/list/{alias} → current entries in an alias.
+     */
+    public function aliasUtilList(string $alias, ?string $instance = null): array
+    {
+        $r = $this->api($instance)->get("/firewall/alias_util/list/{$alias}");
+
+        return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+    }
+
+    // ── Firewall automation rules (for the auto-provisioned block rule) ───────
+
+    /**
+     * POST /api/firewall/filter/search_rule → list automation rules.
+     */
+    public function filterSearchRule(?string $instance = null): array
+    {
+        $r = $this->api($instance)->post('/firewall/filter/search_rule', ['rowCount' => 1000]);
+
+        return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+    }
+
+    /**
+     * POST /api/firewall/filter/add_rule → create an automation filter rule.
+     * Returns the new UUID on success.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function addFilterRule(array $payload, ?string $instance = null): ?string
+    {
+        $r = $this->api($instance)->post('/firewall/filter/add_rule', ['rule' => $payload]);
+        if (! $r->successful()) {
+            return null;
+        }
+
+        return ($r->json('result') ?? null) === 'saved' ? ($r->json('uuid') ?? null) : null;
+    }
+
+    /**
+     * POST /api/firewall/filter/apply → apply staged filter changes.
+     * ⚠️ Staged config — changes are dirty until applied. OPNsense auto-rolls
+     * back after 60s unless a cancel_rollback follows; we rely on that safety
+     * net and do NOT auto-cancel for risk-sensitive changes.
+     */
+    public function applyFilter(?string $instance = null): bool
+    {
+        $r = $this->api($instance)->post('/firewall/filter/apply');
+
+        return $r->successful();
+    }
 }

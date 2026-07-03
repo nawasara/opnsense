@@ -27,6 +27,13 @@ return [
                 'permission' => 'opnsense.vpn.view',
                 'navigate' => true,
             ],
+            [
+                'label' => 'Firewall OPNsense',
+                'icon' => 'lucide-brick-wall',
+                'url' => url($prefix.'/firewall'),
+                'permission' => 'opnsense.firewall.view',
+                'navigate' => true,
+            ],
         ],
     ],
 ];
