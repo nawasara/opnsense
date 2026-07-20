@@ -3,12 +3,14 @@
 namespace Nawasara\Opnsense\Livewire\Vpn;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Nawasara\AuthPrimitives\Attributes\RequiresSudo;
 use Nawasara\AuthPrimitives\Traits\WithSudo;
+use Nawasara\Opnsense\Jobs\SyncVpnAccountsJob;
 use Nawasara\Opnsense\Models\OpnsenseAppliance;
 use Nawasara\Opnsense\Models\OpnsenseVpnAccount;
 use Nawasara\Opnsense\Services\OPNsenseClient;
@@ -75,7 +77,15 @@ class Index extends Component
         return OpnsenseAppliance::orderBy('name')->get();
     }
 
-    /** WireGuard servers on the selected appliance (for server dropdown). */
+    /**
+     * WireGuard servers on the selected appliance (for the server dropdown).
+     *
+     * The result is cached in OPNsenseClient — this runs on every Livewire
+     * render, and an uncached/blocking call to the firewall made the round-trip
+     * fail (surfacing as HTTP 419 in the browser). A failure here must never
+     * take the whole page down: log it and return an empty list so the form
+     * still renders with a "no server" state.
+     */
     #[Computed]
     public function serverOptions()
     {
@@ -87,7 +97,30 @@ class Index extends Component
             return [];
         }
 
-        return app(OPNsenseClient::class)->wireguardServers($appliance->slug);
+        try {
+            return app(OPNsenseClient::class)->wireguardServers($appliance->slug);
+        } catch (\Throwable $e) {
+            Log::warning('[opnsense] gagal memuat daftar server WireGuard: '.$e->getMessage(), [
+                'appliance' => $appliance->slug,
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * Pull the peer list from the firewall now: import peers created directly in
+     * OPNsense and flag records whose peer is gone. Queued so a slow firewall
+     * never blocks the request.
+     */
+    public function syncAccounts(): void
+    {
+        $this->authorize('opnsense.vpn.manage');
+
+        SyncVpnAccountsJob::dispatch(triggerSource: 'manual');
+
+        $this->dispatch('toast', type: 'success',
+            message: 'Sinkronisasi akun VPN berjalan di latar belakang — muat ulang sebentar lagi.');
     }
 
     public function openForm(): void
@@ -133,31 +166,45 @@ class Index extends Component
         $owner = \App\Models\User::find($this->formUserId);
         $this->formName = $this->makePeerName($owner);
 
-        // 1. Generate keypair (OPNsense won't store the private key for us).
-        $keys = $client->wireguardKeyPair($instance);
-        if ($keys === null) {
-            $this->dispatch('toast', type: 'error', message: 'Gagal generate keypair di OPNsense.');
+        // Every step below talks to the firewall. A transport failure (timeout,
+        // TLS, 5xx) would otherwise bubble up and break the Livewire round-trip
+        // — the browser shows a bare error instead of a usable message.
+        try {
+            // 1. Generate keypair (OPNsense won't store the private key for us).
+            $keys = $client->wireguardKeyPair($instance);
+            if ($keys === null) {
+                $this->dispatch('toast', type: 'error', message: 'Gagal generate keypair di OPNsense.');
+                return;
+            }
+
+            // 2. Allocate a tunnel address — next free /32 in the server network.
+            $tunnelAddress = $this->nextTunnelAddress($client, $instance);
+
+            // 3. Register the peer (public key only).
+            $uuid = $client->addWireguardClient([
+                'name' => $this->formName,
+                'pubkey' => $keys['pubkey'],
+                'tunneladdress' => $tunnelAddress,
+                'servers' => $this->formServerUuid,
+            ], $instance);
+
+            if ($uuid === null) {
+                $this->dispatch('toast', type: 'error', message: 'Gagal menambah peer di OPNsense.');
+                return;
+            }
+
+            // 4. Apply.
+            $client->reconfigureWireguard($instance);
+        } catch (\Throwable $e) {
+            Log::error('[opnsense] provisioning VPN gagal: '.$e->getMessage(), [
+                'appliance' => $instance,
+                'user_id' => $this->formUserId,
+            ]);
+            $this->dispatch('toast', type: 'error',
+                message: 'Tidak bisa menghubungi OPNsense: '.$e->getMessage());
+
             return;
         }
-
-        // 2. Allocate a tunnel address — next free /32 in the server network.
-        $tunnelAddress = $this->nextTunnelAddress($client, $instance);
-
-        // 3. Register the peer (public key only).
-        $uuid = $client->addWireguardClient([
-            'name' => $this->formName,
-            'pubkey' => $keys['pubkey'],
-            'tunneladdress' => $tunnelAddress,
-            'servers' => $this->formServerUuid,
-        ], $instance);
-
-        if ($uuid === null) {
-            $this->dispatch('toast', type: 'error', message: 'Gagal menambah peer di OPNsense.');
-            return;
-        }
-
-        // 4. Apply.
-        $client->reconfigureWireguard($instance);
 
         // 5. Record locally with encrypted private key + expiry.
         OpnsenseVpnAccount::create([

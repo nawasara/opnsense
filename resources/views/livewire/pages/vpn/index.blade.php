@@ -9,6 +9,13 @@
             title="VPN — WireGuard"
             description="Akun VPN melekat ke akun SSO dengan masa berlaku. Lewat expiry otomatis dinonaktifkan.">
             @can('opnsense.vpn.manage')
+                {{-- Reconcile with the firewall: imports peers made directly in
+                     OPNsense, flags ones deleted there. --}}
+                <x-nawasara-ui::button color="neutral" variant="outline" wire:click="syncAccounts"
+                    wire:loading.attr="disabled" wire:target="syncAccounts">
+                    <x-slot:icon><x-lucide-refresh-cw /></x-slot:icon>
+                    Sinkron
+                </x-nawasara-ui::button>
                 <x-nawasara-ui::button color="primary" wire:click="openForm"
                     x-on:click="$dispatch('open-modal', { id: 'vpn-provision' })">
                     <x-slot:icon><x-lucide-plus /></x-slot:icon>

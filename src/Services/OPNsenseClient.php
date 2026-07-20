@@ -3,6 +3,7 @@
 namespace Nawasara\Opnsense\Services;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Nawasara\Vault\Facades\Vault;
 
@@ -229,9 +230,26 @@ class OPNsenseClient
      */
     public function wireguardServers(?string $instance = null): array
     {
-        $r = $this->api($instance)->get('/wireguard/server/search_server');
+        // Cached: this feeds a Livewire dropdown, and Livewire re-renders the
+        // component on EVERY interaction (typing, selecting, submitting). Without
+        // a cache each keystroke re-hit the firewall and could block for the full
+        // request timeout, which surfaced in the browser as a failed Livewire
+        // round-trip (HTTP 419). The server list changes rarely, so a short TTL
+        // is safe; provisioning still validates the chosen uuid server-side.
+        $ttl = (int) config('nawasara-opnsense.cache.servers_ttl', 300);
+        $key = 'opnsense:wg-servers:'.($instance ?: 'default');
 
-        return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+        return Cache::remember($key, $ttl, function () use ($instance) {
+            $r = $this->api($instance)->get('/wireguard/server/search_server');
+
+            return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+        });
+    }
+
+    /** Drop the cached server list (after add/remove of a WireGuard server). */
+    public function forgetWireguardServersCache(?string $instance = null): void
+    {
+        Cache::forget('opnsense:wg-servers:'.($instance ?: 'default'));
     }
 
     /**
@@ -251,6 +269,22 @@ class OPNsenseClient
      *
      * @param  array{name: string, pubkey: string, tunneladdress: string, servers: string, psk?: string}  $payload
      */
+    /**
+     * GET /api/wireguard/client/search_client → list WireGuard peers (clients).
+     *
+     * Used to reconcile what actually exists on the firewall with what Nawasara
+     * has on record: peers created directly in OPNsense show up as "unmanaged",
+     * and records whose peer was deleted there are flagged.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function wireguardClients(?string $instance = null): array
+    {
+        $r = $this->api($instance)->get('/wireguard/client/search_client');
+
+        return $r->successful() ? (array) ($r->json('rows') ?? []) : [];
+    }
+
     public function addWireguardClient(array $payload, ?string $instance = null): ?string
     {
         $r = $this->api($instance)->post('/wireguard/client/add_client', ['client' => $payload]);

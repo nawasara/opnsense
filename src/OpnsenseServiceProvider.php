@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Nawasara\Opnsense\Jobs\ExpireVpnAccountsJob;
 use Nawasara\Opnsense\Jobs\SyncOpnsenseStatusJob;
+use Nawasara\Opnsense\Jobs\SyncVpnAccountsJob;
 use Nawasara\Opnsense\Services\OPNsenseClient;
 use Symfony\Component\Finder\Finder;
 
@@ -65,6 +66,18 @@ class OpnsenseServiceProvider extends ServiceProvider
                 ->name('nawasara-opnsense:expire-vpn')
                 ->dailyAt('02:15')
                 ->withoutOverlapping(10);
+
+            // Reconcile the account list with the peers that actually exist on
+            // the firewall: import peers created directly in OPNsense, and mark
+            // records whose peer was removed there. Hourly is enough — peers are
+            // not created often, and the VPN page has a manual sync button.
+            // Minutes between runs; clamped to a valid cron step (1..59) so a
+            // stray config value can't produce an invalid expression.
+            $vpnInterval = max(5, min(59, (int) config('nawasara-opnsense.vpn.sync_interval', 30)));
+            $schedule->call(fn () => SyncVpnAccountsJob::dispatch(triggerSource: 'scheduled'))
+                ->name('nawasara-opnsense:sync-vpn-accounts')
+                ->cron("*/{$vpnInterval} * * * *")
+                ->withoutOverlapping(15);
         });
     }
 
