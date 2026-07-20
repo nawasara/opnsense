@@ -196,12 +196,16 @@ class Index extends Component
             // 4. Apply.
             $client->reconfigureWireguard($instance);
         } catch (\Throwable $e) {
+            // Covers both transport failures and unexpected API payload shapes;
+            // don't claim a connection problem when it may be neither.
             Log::error('[opnsense] provisioning VPN gagal: '.$e->getMessage(), [
                 'appliance' => $instance,
                 'user_id' => $this->formUserId,
+                'exception' => $e::class,
+                'at' => basename($e->getFile()).':'.$e->getLine(),
             ]);
             $this->dispatch('toast', type: 'error',
-                message: 'Tidak bisa menghubungi OPNsense: '.$e->getMessage());
+                message: 'Gagal membuat akun VPN: '.$e->getMessage());
 
             return;
         }
@@ -311,13 +315,19 @@ class Index extends Component
     {
         $used = [];
         foreach ($client->wireguardShow($instance) as $row) {
-            if (($row['type'] ?? '') === 'peer' && ! empty($row['allowed-ips'])) {
-                $used[] = trim(explode('/', $row['allowed-ips'])[0]);
+            if (($row['type'] ?? '') !== 'peer') {
+                continue;
+            }
+            // allowed-ips may be a single CIDR string or a list of them,
+            // depending on the OPNsense version/endpoint. Normalise to a list.
+            foreach ($this->toCidrList($row['allowed-ips'] ?? null) as $cidr) {
+                $used[] = trim(explode('/', $cidr)[0]);
             }
         }
 
         $server = $client->wireguardServer($this->formServerUuid, $instance);
-        $tunnel = $server['tunneladdress'] ?? '10.10.10.1/24';
+        // tunneladdress has the same string-or-list shape; take the first entry.
+        $tunnel = $this->toCidrList($server['tunneladdress'] ?? null)[0] ?? '10.10.10.1/24';
         $base = explode('/', $tunnel)[0];               // 10.10.10.1
         $prefix = implode('.', array_slice(explode('.', $base), 0, 3)); // 10.10.10
 
@@ -329,6 +339,43 @@ class Index extends Component
         }
 
         return "{$prefix}.254/32";
+    }
+
+    /**
+     * Normalise an OPNsense address field to a list of CIDR strings.
+     *
+     * The API is inconsistent across versions and endpoints: an address can come
+     * back as a single string, a comma-separated string, a plain list, or a
+     * keyed map ("10.0.0.2/32" => ['selected' => 1]). Passing the raw value to
+     * explode() blew up with "explode(): Argument #2 must be of type string,
+     * array given" and aborted provisioning.
+     *
+     * @return list<string>
+     */
+    protected function toCidrList(mixed $value): array
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return [];
+        }
+
+        if (is_string($value)) {
+            return array_values(array_filter(array_map('trim', explode(',', $value))));
+        }
+
+        if (is_array($value)) {
+            $out = [];
+            foreach ($value as $key => $entry) {
+                // Keyed map: the CIDR is the key. Plain list: it's the value.
+                $candidate = is_string($key) && ! is_numeric($key) ? $key : $entry;
+                if (is_string($candidate) && trim($candidate) !== '') {
+                    $out[] = trim($candidate);
+                }
+            }
+
+            return array_values($out);
+        }
+
+        return [];
     }
 
     /**
