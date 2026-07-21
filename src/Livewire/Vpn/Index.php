@@ -227,9 +227,21 @@ class Index extends Component
             'provisioned_at' => now(),
         ]);
 
-        $this->dispatch('close-modal', 'vpn-provision');
+        // The modal listens for the id in the event NAME ($wire.on('modal-close:<id>')),
+        // not as a payload. Dispatching 'close-modal' from Livewire hits neither
+        // listener — the .window variant only fires for Alpine's $dispatch — so the
+        // modal stayed open on top of the refreshed table, looking like the save failed.
+        $this->dispatch('modal-close:vpn-provision');
         $this->dispatch('toast', type: 'success', message: 'Akun VPN dibuat. Unduh config untuk user.');
         unset($this->accounts);
+
+        // Clear the form so the next "Buat Akun VPN" starts blank rather than
+        // re-showing the peer that was just created.
+        $this->formUserId = null;
+        $this->formUserSearch = '';
+        $this->formName = '';
+        $this->formServerUuid = null;
+        $this->formTtlMonths = (int) config('nawasara-opnsense.vpn.default_ttl_months', 6);
     }
 
     public function renew(int $id): void
