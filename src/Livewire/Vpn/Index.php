@@ -55,7 +55,21 @@ class Index extends Component
             ->paginate(20);
     }
 
-    /** SSO users matching the form search — for the provision dropdown. */
+    /**
+     * Kandidat pemilik VPN, dicari di direktori Keycloak — bukan di tabel
+     * `users` lokal.
+     *
+     * Tabel lokal hanya berisi orang yang pernah login; pegawai yang butuh VPN
+     * justru sering belum pernah membuka Nawasara sama sekali, jadi mencari di
+     * sana membuat mereka tak bisa dipilih. Yang dipilih akan di-provision jadi
+     * user lokal (role default) saat form disimpan.
+     *
+     * Fallback ke tabel lokal kalau package keycloak tidak terpasang atau
+     * snapshot-nya masih kosong — admin tidak boleh terkunci karena sync
+     * belum jalan.
+     *
+     * @return \Illuminate\Support\Collection<int, array{kc_id:?string, name:string, email:?string, subtitle:string, user_id:?int}>
+     */
     #[Computed]
     public function userOptions()
     {
@@ -63,12 +77,66 @@ class Index extends Component
             return collect();
         }
 
+        if ($this->directoryAvailable()) {
+            return collect($this->searchDirectory());
+        }
+
         return User::where('auth_type', 'sso')
             ->where(fn ($q) => $q->where('name', 'like', "%{$this->formUserSearch}%")
                 ->orWhere('email', 'like', "%{$this->formUserSearch}%")
                 ->orWhere('username', 'like', "%{$this->formUserSearch}%"))
             ->limit(10)
-            ->get(['id', 'name', 'email']);
+            ->get()
+            ->map(fn (User $u) => [
+                'kc_id' => $u->keycloak_id,
+                'name' => $u->name,
+                'email' => $u->email,
+                'subtitle' => $u->email ?: $u->username,
+                'user_id' => $u->id,
+            ]);
+    }
+
+    /** Snapshot Keycloak terpasang DAN sudah pernah ter-sync. */
+    protected function directoryAvailable(): bool
+    {
+        if (! class_exists(\Nawasara\Keycloak\Models\KeycloakUser::class)) {
+            return false;
+        }
+
+        try {
+            return \Nawasara\Keycloak\Models\KeycloakUser::query()->exists();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Cari di snapshot Keycloak. Orang yang sudah punya user lokal tetap
+     * ditampilkan (beda dengan membership) — satu orang boleh punya lebih dari
+     * satu akun VPN, jadi tidak ada yang perlu disaring.
+     *
+     * @return array<int, array{kc_id:string, name:string, email:?string, subtitle:string, user_id:?int}>
+     */
+    protected function searchDirectory(): array
+    {
+        $rows = \Nawasara\Keycloak\Models\KeycloakUser::query()
+            ->search($this->formUserSearch)
+            ->where('enabled', true)
+            ->limit(10)
+            ->get();
+
+        $localByKcId = User::whereIn('keycloak_id', $rows->pluck('user_id')->filter()->all())
+            ->pluck('id', 'keycloak_id');
+        $localByUsername = User::whereIn('username', $rows->pluck('username')->filter()->all())
+            ->pluck('id', 'username');
+
+        return $rows->map(fn ($kc) => [
+            'kc_id' => $kc->user_id,
+            'name' => $kc->full_name ?: ($kc->username ?? '—'),
+            'email' => $kc->email,
+            'subtitle' => $kc->nip ? 'NIP '.$kc->nip : ($kc->email ?: (string) $kc->username),
+            'user_id' => $localByKcId[$kc->user_id] ?? $localByUsername[$kc->username] ?? null,
+        ])->all();
     }
 
     #[Computed]
@@ -132,10 +200,70 @@ class Index extends Component
         $this->dispatch('modal-open:vpn-provision');
     }
 
-    public function selectUser(int $userId, string $label): void
+    /**
+     * Pilih calon pemilik VPN dari hasil pencarian.
+     *
+     * Kalau orang itu belum punya user lokal, dia di-provision sekarang juga
+     * (bukan saat submit) supaya `formUserId` selalu menunjuk baris nyata dan
+     * validasi `exists:users,id` di provision() tetap berlaku apa adanya.
+     *
+     * Index merujuk posisi di hasil yang dihitung ulang server-side, bukan
+     * identitas yang dipercaya dari DOM — lihat CLAUDE.md 13.f.
+     */
+    public function selectUser(int $index): void
     {
+        $this->authorize('opnsense.vpn.manage');
+
+        $picked = $this->userOptions[$index] ?? null;
+        if (! $picked) {
+            $this->dispatch('toast', type: 'error', message: 'Pilihan tidak valid, coba cari ulang.');
+
+            return;
+        }
+
+        $userId = $picked['user_id'];
+
+        if (! $userId) {
+            $user = $this->provisionFromDirectory($picked['kc_id']);
+            if (! $user) {
+                $this->dispatch('toast', type: 'error',
+                    message: 'Gagal menyiapkan akun Nawasara untuk user ini.');
+
+                return;
+            }
+            $userId = $user->id;
+        }
+
         $this->formUserId = $userId;
-        $this->formUserSearch = $label;
+        $this->formUserSearch = $picked['name'];
+        unset($this->userOptions);
+    }
+
+    /**
+     * Buat user lokal dari snapshot Keycloak lewat provisioner bersama —
+     * aturan penautan dan pemberian role default identik dengan jalur lain
+     * (login SSO, membership registry, PJ zoom).
+     */
+    protected function provisionFromDirectory(?string $keycloakId): ?User
+    {
+        if (! $keycloakId || ! class_exists(\Nawasara\Keycloak\Support\KeycloakUserProvisioner::class)) {
+            return null;
+        }
+
+        $kc = \Nawasara\Keycloak\Models\KeycloakUser::where('user_id', $keycloakId)->first();
+        if (! $kc) {
+            return null;
+        }
+
+        try {
+            return app(\Nawasara\Keycloak\Support\KeycloakUserProvisioner::class)->fromSnapshot($kc);
+        } catch (\Throwable $e) {
+            Log::error('[opnsense] gagal provision user dari Keycloak: '.$e->getMessage(), [
+                'keycloak_id' => $keycloakId,
+            ]);
+
+            return null;
+        }
     }
 
     /**

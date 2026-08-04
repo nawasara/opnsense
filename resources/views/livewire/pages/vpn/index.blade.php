@@ -134,23 +134,31 @@
              submit button is guaranteed inside <form> in the DOM — the footer
              slot renders in a separate div, breaking submit for a button there. --}}
         <form wire:submit="provision" class="space-y-4">
-            {{-- Pemilik SSO --}}
+            {{-- Pemilik — dicari di direktori Keycloak, bukan tabel users lokal.
+                 Pemilihan pakai index (bukan id+nama lewat atribut) supaya nama
+                 ber-apostrof tidak merusak parsing wire:click. --}}
             <div>
                 <x-nawasara-ui::form.label value="Pemilik (Akun SSO)" />
                 <div class="relative">
                     <x-nawasara-ui::form.input
                         type="text"
                         wire:model.live.debounce.300ms="formUserSearch"
-                        placeholder="Ketik nama / email user SSO…"
+                        placeholder="Ketik nama / NIP / email…"
                         autocomplete="off" />
                     @if ($this->userOptions->isNotEmpty() && ! $formUserId)
                         <div class="absolute z-20 mt-1 w-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                            @foreach ($this->userOptions as $u)
+                            @foreach ($this->userOptions as $idx => $u)
                                 <button type="button"
-                                    wire:click="selectUser({{ $u->id }}, '{{ addslashes($u->name) }}')"
-                                    class="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700">
-                                    <div class="text-neutral-800 dark:text-neutral-100">{{ $u->name }}</div>
-                                    <div class="text-xs text-neutral-500 dark:text-neutral-400">{{ $u->email }}</div>
+                                    wire:key="vpn-owner-{{ $u['kc_id'] ?? $u['user_id'] ?? $idx }}"
+                                    wire:click="selectUser({{ $idx }})"
+                                    class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700">
+                                    <span class="min-w-0">
+                                        <span class="block truncate text-neutral-800 dark:text-neutral-100">{{ $u['name'] }}</span>
+                                        <span class="block truncate text-xs text-neutral-500 dark:text-neutral-400">{{ $u['subtitle'] }}</span>
+                                    </span>
+                                    @unless ($u['user_id'])
+                                        <x-nawasara-ui::badge color="info">Akun baru</x-nawasara-ui::badge>
+                                    @endunless
                                 </button>
                             @endforeach
                         </div>
