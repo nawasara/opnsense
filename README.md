@@ -1,39 +1,31 @@
 # nawasara/opnsense
 
-OPNsense firewall control plane untuk Nawasara superapp — monitoring
-health/traffic/gateway, VPN self-service (WireGuard/OpenVPN dengan akun ber-SSO
-+ masa berlaku), dan manajemen firewall via OPNsense REST API.
+OPNsense firewall control plane for the Nawasara superapp: health/traffic/gateway monitoring, VPN self-service (WireGuard/OpenVPN with SSO accounts and expiry), and firewall management via the OPNsense REST API.
 
-Client pattern sama `nawasara/proxmox`: HTTP Basic + Vault + self-signed TLS,
-tanpa sidecar.
+Same client pattern as `nawasara/proxmox`: HTTP Basic + Vault + self-signed TLS, no sidecar.
 
 ## Status
 
-**Fase A (Monitoring) — scaffolded.** Dashboard read-only: status appliance
-(CPU/RAM/disk/uptime/suhu) + gateway (WAN up/down + latency). Fase B (VPN) & C
-(Firewall) menyusul — lihat `docs/nawasara-opnsense/`.
+Phase A (Monitoring): scaffolded. Read-only dashboard: appliance status (CPU/RAM/disk/uptime/temperature) and gateway (WAN up/down + latency). Phase B (VPN) and Phase C (Firewall) are coming, see `docs/nawasara-opnsense/`.
 
 ## Setup
 
-1. Kredensial di Vault (group `opnsense`, multi-instance):
-   - `host` (mis. `https://10.10.10.1:64443`), `api_key`, `api_secret`, `verify_ssl`
-   - Generate API key di OPNsense: System ‣ Access ‣ Users → API keys → `+`
-2. Seed permission:
+1. Credentials in Vault (group `opnsense`, multi-instance):
+   - `host` (e.g. `https://10.10.10.1:64443`), `api_key`, `api_secret`, `verify_ssl`
+   - Generate an API key in OPNsense: System > Access > Users, then API keys, then `+`
+2. Seed permissions:
    ```
    php artisan db:seed --class="Nawasara\Opnsense\Database\Seeders\PermissionSeeder"
    ```
-3. Sync jalan otomatis tiap `sync_interval` menit (default 2), atau tombol Sync di UI.
+3. Sync runs automatically every `sync_interval` minutes (default 2), or via the Sync button in the UI.
 
 ## Permissions
 
-Read-only (auto-grant developer): `opnsense.monitor.view`, `opnsense.vpn.view`,
-`opnsense.firewall.view`, `opnsense.sync.execute`.
-Write-risk (assign eksplisit): `opnsense.vpn.manage`, `opnsense.vpn.renew`,
-`opnsense.vpn.export`, `opnsense.firewall.manage`, `opnsense.firewall.apply`.
+Read-only (auto-granted to developer): `opnsense.monitor.view`, `opnsense.vpn.view`, `opnsense.firewall.view`, `opnsense.sync.execute`.
+Write-risk (assign explicitly): `opnsense.vpn.manage`, `opnsense.vpn.renew`, `opnsense.vpn.export`, `opnsense.firewall.manage`, `opnsense.firewall.apply`.
 
-## Catatan teknis
+## Technical notes
 
-- Endpoint casing berubah di OPNsense 25.7 (camelCase → snake_case). Client pakai
-  snake_case (26.x). Cek `getVersion()` sebelum andalkan casing tertentu.
-- CPU & traffic hanya via SSE stream di OPNsense — sync pakai snapshot counter, bukan stream.
-- Firewall write (Fase C) staged config — wajib `apply`, auto-rollback 60 detik.
+- Endpoint casing changed in OPNsense 25.7 (camelCase became snake_case). The client uses snake_case (26.x). Check `getVersion()` before relying on a particular casing.
+- CPU and traffic are only available via SSE stream in OPNsense, so sync uses a snapshot counter, not the stream.
+- Firewall writes (Phase C) use staged config, so an `apply` is required, with a 60-second auto-rollback.
