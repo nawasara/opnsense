@@ -9,6 +9,7 @@ use Nawasara\AuthPrimitives\Traits\WithSudo;
 use Nawasara\Opnsense\Models\OpnsenseAppliance;
 use Nawasara\Opnsense\Services\FirewallBlocklistService;
 use Nawasara\Opnsense\Services\OPNsenseClient;
+use Nawasara\Opnsense\Support\BlockGuard;
 
 class Index extends Component
 {
@@ -56,10 +57,23 @@ class Index extends Component
         return app(FirewallBlocklistService::class)->listIps($this->instance());
     }
 
+    /**
+     * Sudo + whitelist (audit keamanan 15 Oktober 2026, R8): memblokir di
+     * firewall kantor dapat memutus staf atau server dalam dari jaringannya
+     * sendiri, jadi sama berbahayanya dengan membuka blokir.
+     */
+    #[RequiresSudo(reason: 'memblokir IP di firewall')]
     public function blockIp(): void
     {
         $this->authorize('opnsense.firewall.manage');
         $this->validate(['newIp' => 'required|ip'], [], ['newIp' => 'IP']);
+
+        $reason = BlockGuard::reasonNotToBlock($this->newIp, BlockGuard::configuredCidrs());
+        if ($reason !== null) {
+            $this->addError('newIp', $reason);
+
+            return;
+        }
 
         $ok = app(FirewallBlocklistService::class)->blockIp($this->newIp, $this->instance());
 

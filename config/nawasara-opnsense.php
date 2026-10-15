@@ -25,6 +25,22 @@ return [
         'enabled' => env('NAWASARA_OPNSENSE_SCHEDULER', true),
     ],
 
+    /*
+    | Blocklist firewall (audit keamanan 15 Oktober 2026, R8).
+    |
+    | IP/CIDR yang TIDAK PERNAH boleh masuk blocklist, dipisah koma lewat env.
+    | Bawaannya rentang IP publik kantor Kominfo Ponorogo. Rentang privat,
+    | loopback, dan link-local selalu dilindungi tanpa perlu ditulis di sini
+    | (lihat Support\BlockGuard), dan whitelist auto-block secscan
+    | (SECSCAN_AUTOBLOCK_WHITELIST) ikut dipakai bila paketnya terpasang.
+    */
+    'firewall' => [
+        'never_block' => array_values(array_filter(array_map('trim', explode(',', (string) env(
+            'NAWASARA_OPNSENSE_NEVER_BLOCK',
+            '103.109.206.0/24',
+        ))))),
+    ],
+
     // Threshold warna untuk dashboard health (persen).
     'thresholds' => [
         'cpu_warn' => 70,

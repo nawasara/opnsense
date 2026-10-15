@@ -89,6 +89,21 @@ class FirewallBlocklistService
         if (! filter_var($ip, FILTER_VALIDATE_IP)) {
             return false;
         }
+
+        // Diperiksa juga di sini, bukan hanya di halaman Firewall: layanan
+        // ini adalah titik integrasi untuk paket lain (secscan), dan pemanggil
+        // mana pun tidak boleh dapat memblokir IP kantor atau privat.
+        // Audit keamanan 15 Oktober 2026, R8.
+        $reason = \Nawasara\Opnsense\Support\BlockGuard::reasonNotToBlock(
+            $ip,
+            \Nawasara\Opnsense\Support\BlockGuard::configuredCidrs(),
+        );
+        if ($reason !== null) {
+            Log::warning('[opnsense] blockIp ditolak whitelist', ['ip' => $ip, 'reason' => $reason]);
+
+            return false;
+        }
+
         $this->ensureProvisioned($instance);
 
         return $this->client->aliasUtilAdd(self::ALIAS_NAME, $ip, $instance);

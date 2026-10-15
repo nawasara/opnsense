@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Nawasara\AuthPrimitives\Attributes\RequiresSudo;
@@ -25,6 +26,9 @@ class Index extends Component
     public string $filterStatus = '';
 
     // Provision form
+    // #[Locked]: hanya diisi server, browser tidak boleh mengubahnya
+    // (audit keamanan 15 Oktober 2026).
+    #[Locked]
     public ?int $formUserId = null;
     public string $formUserSearch = '';
     public ?int $formApplianceId = null;
