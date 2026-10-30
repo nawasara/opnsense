@@ -96,6 +96,11 @@
                                     @else
                                         <span class="text-neutral-400">—</span>
                                     @endif
+                                    @if ($acc->renew_requested_at)
+                                        <div class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                            Pemilik minta perpanjang · {{ $acc->renew_requested_at->diffForHumans() }}
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     @php

@@ -395,6 +395,7 @@ class Index extends Component
             'expires_at' => now()->addMonths($ttl),
             'status' => OpnsenseVpnAccount::STATUS_ACTIVE,
             'last_renewed_at' => now(),
+            'renew_requested_at' => null,
         ]);
 
         $this->dispatch('toast', type: 'success', message: 'Masa berlaku diperpanjang '.$ttl.' bulan.');

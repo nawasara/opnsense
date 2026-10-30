@@ -3,9 +3,11 @@
 namespace Nawasara\Opnsense\Jobs;
 
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Carbon;
 use Nawasara\Opnsense\Models\OpnsenseAppliance;
 use Nawasara\Opnsense\Models\OpnsenseVpnAccount;
 use Nawasara\Opnsense\Services\OPNsenseClient;
+use Nawasara\Opnsense\Support\HandshakeIndex;
 use Nawasara\Sync\Jobs\AbstractSyncJob;
 
 /**
@@ -115,6 +117,13 @@ class SyncVpnAccountsJob extends AbstractSyncJob
                         'provisioned_at' => null,
                     ]);
                     $imported++;
+                }
+
+                $handshakes = HandshakeIndex::fromShowRows($client->wireguardShow($instance));
+                foreach ($handshakes as $publicKey => $at) {
+                    OpnsenseVpnAccount::where('appliance_id', $appliance->id)
+                        ->where('public_key', $publicKey)
+                        ->update(['last_handshake_at' => Carbon::createFromTimestamp($at)]);
                 }
 
                 // Records pointing at peers that no longer exist upstream.

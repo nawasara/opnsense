@@ -24,7 +24,7 @@ class OpnsenseVpnAccount extends Model
     protected $fillable = [
         'appliance_id', 'user_id', 'type', 'name', 'opnsense_uuid', 'server_uuid',
         'public_key', 'private_key', 'tunnel_address', 'expires_at', 'status',
-        'provisioned_by', 'provisioned_at', 'last_renewed_at', 'revoked_by', 'revoked_at',
+        'provisioned_by', 'provisioned_at', 'last_renewed_at', 'last_handshake_at', 'renew_requested_at', 'revoked_by', 'revoked_at',
     ];
 
     protected $casts = [
@@ -34,6 +34,8 @@ class OpnsenseVpnAccount extends Model
         'expires_at' => 'datetime',
         'provisioned_at' => 'datetime',
         'last_renewed_at' => 'datetime',
+        'last_handshake_at' => 'datetime',
+        'renew_requested_at' => 'datetime',
         'revoked_at' => 'datetime',
     ];
 

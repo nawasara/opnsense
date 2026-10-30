@@ -19,6 +19,15 @@ Phase A (Monitoring): scaffolded. Read-only dashboard: appliance status (CPU/RAM
    ```
 3. Sync runs automatically every `sync_interval` minutes (default 2), or via the Sync button in the UI.
 
+## ASN account portal
+
+`nawasara/asn-portal` lets a civil servant see their own VPN accounts, download the `.conf`, and ask for a renewal. Two columns exist for it:
+
+- `last_handshake_at`: written by `SyncVpnAccountsJob` from `/wireguard/service/show`, so the portal can say "last connected" without calling the firewall on every page load. A peer that never connected reports 0 and is left null rather than stored as 1970 (`HandshakeIndex`).
+- `renew_requested_at`: set by the owner from the portal, shown under "Berlaku s/d" on the VPN page, and cleared by an admin renewal. Renewal stays an admin action until auto-renewal is decided.
+
+Accounts are found through `users.keycloak_id`, so only accounts with an owner picked from the Keycloak directory appear in the portal.
+
 ## Permissions
 
 Read-only (auto-granted to developer): `opnsense.monitor.view`, `opnsense.vpn.view`, `opnsense.firewall.view`, `opnsense.sync.execute`.
