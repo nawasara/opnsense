@@ -28,6 +28,19 @@ Phase A (Monitoring): scaffolded. Read-only dashboard: appliance status (CPU/RAM
 
 Accounts are found through `users.keycloak_id`, so only accounts with an owner picked from the Keycloak directory appear in the portal.
 
+## Client `.conf`
+
+OPNsense cannot export a peer's `.conf`, so `WireguardConfigBuilder` assembles it. Four values come from `config/nawasara-opnsense.php` (`vpn.*`), and their defaults match a config confirmed to connect from outside the office (4 November 2026):
+
+| Key | Env | Default | Why |
+|---|---|---|---|
+| `endpoint_host` | `NAWASARA_OPNSENSE_WG_ENDPOINT` | `103.109.206.55` | The appliance host (`10.10.10.1`) is an inside address. Used as `Endpoint`, a client at home can never reach it and the tunnel never comes up. |
+| `allowed_ips` | `NAWASARA_OPNSENSE_WG_ALLOWED_IPS` | `0.0.0.0/0, ::/0` | The server's tunnel address (`10.10.10.1/24`) only routes the tunnel subnet, not the office servers behind it. |
+| `dns` | `NAWASARA_OPNSENSE_WG_DNS` | `8.8.8.8` | Used only when the OPNsense server sets no DNS. |
+| `mtu` | `NAWASARA_OPNSENSE_WG_MTU` | `1280` | Safe on mobile/PPPoE paths that drop large packets (symptom: connected, but pages never load). |
+
+Until v0.3.11 the builder fell back to the appliance host and the tunnel address, so every downloaded `.conf` was unusable from outside. Accounts keep their keys; the owner only needs to download again.
+
 ## Permissions
 
 Read-only (auto-granted to developer): `opnsense.monitor.view`, `opnsense.vpn.view`, `opnsense.firewall.view`, `opnsense.sync.execute`.

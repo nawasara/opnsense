@@ -33,15 +33,10 @@ class WireguardConfigBuilder
 
         $serverPubkey = $this->scalar($server['pubkey'] ?? '');
         $serverPort = $this->scalar($server['port'] ?? '51820') ?: '51820';
-        // Endpoint host: prefer the appliance's public/reachable address. The
-        // appliance host is an internal LAN IP; the WAN/endpoint the client dials
-        // may differ — expose it via config or the server 'endpoint' field later.
         $endpointHost = $this->endpointHost($account);
 
-        $dns = $this->scalar($server['dns'] ?? '');
-        // Peers get a /32 tunnel address; AllowedIPs defaults to the server's
-        // tunnel network (split tunnel) or 0.0.0.0/0 (full tunnel) — keep it to
-        // the server tunnel network unless configured otherwise.
+        $dns = $this->scalar($server['dns'] ?? '') ?: (string) config('nawasara-opnsense.vpn.dns', '');
+        $mtu = (int) config('nawasara-opnsense.vpn.mtu', 0);
         $allowedIps = $this->allowedIps($server);
 
         $lines = [
@@ -49,6 +44,9 @@ class WireguardConfigBuilder
             'PrivateKey = '.$account->private_key,
             'Address = '.($account->tunnel_address ?: ''),
         ];
+        if ($mtu > 0) {
+            $lines[] = 'MTU = '.$mtu;
+        }
         if ($dns !== '') {
             $lines[] = 'DNS = '.$dns;
         }
@@ -82,11 +80,17 @@ class WireguardConfigBuilder
     }
 
     /**
-     * Default AllowedIPs. Use the server tunnel network for split tunnel; a
-     * consumer wanting full tunnel can edit the downloaded .conf.
+     * AllowedIPs from config (full tunnel by default). The server's tunnel
+     * address is only a fallback: it is the server's own host address
+     * (10.10.10.1/24), so it routes the tunnel subnet and nothing behind it.
      */
     protected function allowedIps(array $server): string
     {
+        $configured = trim((string) config('nawasara-opnsense.vpn.allowed_ips', ''));
+        if ($configured !== '') {
+            return $configured;
+        }
+
         $tunnel = $this->scalar($server['tunneladdress'] ?? '');
         if ($tunnel !== '' && str_contains($tunnel, '/')) {
             return $tunnel;

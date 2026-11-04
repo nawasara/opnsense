@@ -59,9 +59,19 @@ return [
         'warn_before_days' => 14,
         // Setelah expired + N hari grace → boleh hard delete.
         'grace_period_days' => 30,
-        // Endpoint host untuk .conf client (WAN address yg didial user).
-        // Kosong = pakai host appliance (LAN). Set kalau WAN address beda.
-        'endpoint_host' => env('NAWASARA_OPNSENSE_WG_ENDPOINT', ''),
+        // Isi .conf client. Bawaan = config yang terbukti tersambung dari luar
+        // kantor (2026-11-04). Host appliance adalah alamat dalam (10.10.10.1),
+        // jadi tidak bisa dipakai sebagai Endpoint: klien di rumah tak bisa
+        // menjangkaunya dan tunnel tak pernah naik.
+        'endpoint_host' => env('NAWASARA_OPNSENSE_WG_ENDPOINT', '103.109.206.55'),
+        // Full tunnel. Split ke jaringan tunnel saja (10.10.10.0/24) tidak
+        // memuat jaringan server kantor yang justru ingin dijangkau.
+        'allowed_ips' => env('NAWASARA_OPNSENSE_WG_ALLOWED_IPS', '0.0.0.0/0, ::/0'),
+        // Dipakai bila server WireGuard di OPNsense tidak menyetel DNS.
+        'dns' => env('NAWASARA_OPNSENSE_WG_DNS', '8.8.8.8'),
+        // 1280 = MTU minimum IPv6; aman di jalur seluler/PPPoE yang memotong
+        // paket besar (gejala: tersambung tapi halaman tak pernah termuat).
+        'mtu' => env('NAWASARA_OPNSENSE_WG_MTU', 1280),
 
         // Interval (menit) rekonsiliasi daftar akun dengan peer di firewall:
         // impor peer yang dibuat langsung di OPNsense, tandai yang sudah dihapus
