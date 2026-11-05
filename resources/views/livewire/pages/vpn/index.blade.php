@@ -57,13 +57,19 @@
                     description="Buat akun VPN untuk user SSO — pilih pemilik, server, dan masa berlaku." />
             @else
                 <x-nawasara-ui::table stickyLast
-                    :headers="['Nama', 'Pemilik (SSO)', 'Server', 'Alamat', 'Status', 'Berlaku s/d', '']">
+                    :headers="['Nama', 'Pemilik (SSO)', 'Server', 'Alamat', 'Berlaku s/d', '']">
                     <x-slot:table>
                         @foreach ($this->accounts as $acc)
                             <tr class="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
                                 <td class="px-4 py-3">
                                     <div class="font-medium text-neutral-800 dark:text-neutral-100">{{ $acc->name }}</div>
                                     <div class="text-xs text-neutral-400 dark:text-neutral-500 uppercase">{{ $acc->type }}</div>
+                                    {{-- Status di bawah nama, bukan kolom sendiri: terlihat tanpa menggulir ke kanan. --}}
+                                    <div class="mt-1">
+                                        <x-nawasara-ui::badge :color="$acc->statusColor()">
+                                            {{ ['active' => 'Aktif', 'expiring_soon' => 'Akan Kedaluwarsa', 'expired' => 'Kedaluwarsa', 'revoked' => 'Dicabut'][$acc->status] ?? ucfirst($acc->status) }}
+                                        </x-nawasara-ui::badge>
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-sm text-neutral-700 dark:text-neutral-200">
                                     @if ($acc->user)
@@ -78,11 +84,6 @@
                                 </td>
                                 <td class="px-4 py-3 font-mono text-sm text-neutral-600 dark:text-neutral-300">
                                     {{ $acc->tunnel_address ?? '—' }}
-                                </td>
-                                <td class="px-4 py-3">
-                                    <x-nawasara-ui::badge :color="$acc->statusColor()">
-                                        {{ ['active' => 'Aktif', 'expiring_soon' => 'Akan Kedaluwarsa', 'expired' => 'Kedaluwarsa', 'revoked' => 'Dicabut'][$acc->status] ?? ucfirst($acc->status) }}
-                                    </x-nawasara-ui::badge>
                                 </td>
                                 <td class="px-4 py-3 text-sm whitespace-nowrap">
                                     @if ($acc->expires_at)

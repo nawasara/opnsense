@@ -41,21 +41,22 @@
                     description="Tambahkan kredensial OPNsense di Vault, lalu jalankan sync." />
             @else
                 <x-nawasara-ui::table
-                    :headers="['Appliance', 'Versi', 'Status', 'CPU', 'RAM', 'Disk', 'Uptime', 'Suhu']">
+                    :headers="['Appliance', 'Versi', 'CPU', 'RAM', 'Disk', 'Uptime', 'Suhu']">
                     <x-slot:table>
                         @foreach ($this->appliances as $app)
                             <tr class="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
                                 <td class="px-4 py-3">
                                     <div class="font-medium text-neutral-800 dark:text-neutral-100">{{ $app->name }}</div>
                                     <div class="text-xs text-neutral-500 dark:text-neutral-400 font-mono">{{ $app->host }}</div>
+                                    {{-- Status di bawah nama, bukan kolom sendiri: terlihat tanpa menggulir ke kanan. --}}
+                                    <div class="mt-1">
+                                        <x-nawasara-ui::badge :color="$app->isOnline() ? 'success' : 'danger'">
+                                            {{ $app->isOnline() ? 'Online' : ucfirst($app->status) }}
+                                        </x-nawasara-ui::badge>
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-300">
                                     {{ $app->version ?? '—' }}
-                                </td>
-                                <td class="px-4 py-3">
-                                    <x-nawasara-ui::badge :color="$app->isOnline() ? 'success' : 'danger'">
-                                        {{ $app->isOnline() ? 'Online' : ucfirst($app->status) }}
-                                    </x-nawasara-ui::badge>
                                 </td>
                                 <td class="px-4 py-3 text-sm text-neutral-700 dark:text-neutral-200">
                                     {{ $app->cpu_pct !== null ? $app->cpu_pct . '%' : '—' }}
