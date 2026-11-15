@@ -1,7 +1,7 @@
 <div>
     <x-slot name="breadcrumb">
         <livewire:nawasara-ui.shared-components.breadcrumb
-            :items="[['label' => 'Monitoring', 'url' => '#'], ['label' => 'OPNsense VPN']]" />
+            :items="[['label' => 'OPNsense', 'url' => '#'], ['label' => 'VPN']]" />
     </x-slot>
 
     <x-nawasara-ui::page.container>
